@@ -21,7 +21,7 @@ const seedState = {
     { key: "events", label: "Events attended", actual: 17, target: 120, unit: "", color: "#44724c", category: "visibility" },
     { key: "stakeholderMeetings", label: "Stakeholder meetings", actual: 28, target: 180, unit: "", color: "#d6a83f", category: "relationships" },
     { key: "endorsements", label: "Endorsements", actual: 4, target: 35, unit: "", color: "#0d7a78", category: "relationships" },
-    { key: "volunteers", label: "Active volunteers", actual: 31, target: 90, unit: "", color: "#9f3d35", category: "team" },
+    { key: "volunteers", label: "Active volunteers", actual: 31, target: 90, unit: "", color: "#d85f4a", category: "team" },
     { key: "signs", label: "Signs placed", actual: 0, target: 650, unit: "", color: "#285f9c", category: "visibility" },
   ],
   events: [
@@ -1085,14 +1085,14 @@ function showLoginOverlay() {
       const style = document.createElement("style");
       style.id = "loginOverlayStyles";
       style.textContent = `
-        .login-overlay { position: fixed; inset: 0; background: rgba(10, 22, 30, 0.85); display: grid; place-items: center; z-index: 9999; }
-        .login-card { background: #fff; padding: 28px 32px; border-radius: 12px; width: min(380px, 90vw); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); font-family: inherit; }
-        .login-card h2 { margin: 0; font-size: 22px; }
-        .login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #2a3946; }
-        .login-card input { padding: 10px 12px; border: 1px solid #c9d3da; border-radius: 8px; font-size: 14px; }
-        .login-card button { padding: 10px 14px; border: 0; border-radius: 8px; background: #075f63; color: #fff; font-weight: 600; cursor: pointer; }
+        .login-overlay { position: fixed; inset: 0; background: rgba(16, 37, 35, 0.55); display: grid; place-items: center; z-index: 9999; }
+        .login-card { background: var(--panel); padding: 28px 32px; border-radius: var(--radius); width: min(380px, 90vw); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); font-family: inherit; border: 1px solid var(--line); color: var(--ink); }
+        .login-card h2 { margin: 0; font-size: 1.4rem; }
+        .login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 0.84rem; font-weight: 800; color: var(--ink); }
+        .login-card input { padding: 9px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.95rem; background: #fff; color: var(--ink); }
+        .login-card button { padding: 0 14px; min-height: 40px; border: 1px solid var(--teal); border-radius: 6px; background: var(--teal); color: #fff; font-weight: 800; cursor: pointer; }
         .login-card button:disabled { opacity: 0.6; cursor: progress; }
-        .login-error { color: #b3261e; font-size: 13px; margin: 0; }
+        .login-error { color: var(--coral); font-size: 0.85rem; margin: 0; font-weight: 800; }
       `;
       document.head.appendChild(style);
     }
