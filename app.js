@@ -1039,16 +1039,149 @@ function bindForms() {
   });
 }
 
+let supabaseClient = null;
+let currentSession = null;
+let currentProfile = null;
+
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  const config = window.CAMPAIGN_CONFIG || {};
+  if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
+  if (!window.supabase || !window.supabase.createClient) return null;
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: "dorit-auth" },
+  });
+  return supabaseClient;
+}
+
+function authHeaders() {
+  const config = window.CAMPAIGN_CONFIG || {};
+  const token = currentSession?.access_token || config.supabaseAnonKey;
+  return {
+    apikey: config.supabaseAnonKey,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function loadProfile() {
+  if (!currentSession) return;
+  const client = getSupabaseClient();
+  if (!client) return;
+  const { data } = await client
+    .from("profiles")
+    .select("display_name, role")
+    .eq("id", currentSession.user.id)
+    .single();
+  currentProfile = data || null;
+  if (data?.role) {
+    state.activeRole = data.role;
+    saveState();
+  }
+}
+
+function showLoginOverlay() {
+  return new Promise((resolve) => {
+    if (!document.getElementById("loginOverlayStyles")) {
+      const style = document.createElement("style");
+      style.id = "loginOverlayStyles";
+      style.textContent = `
+        .login-overlay { position: fixed; inset: 0; background: rgba(10, 22, 30, 0.85); display: grid; place-items: center; z-index: 9999; }
+        .login-card { background: #fff; padding: 28px 32px; border-radius: 12px; width: min(380px, 90vw); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); font-family: inherit; }
+        .login-card h2 { margin: 0; font-size: 22px; }
+        .login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #2a3946; }
+        .login-card input { padding: 10px 12px; border: 1px solid #c9d3da; border-radius: 8px; font-size: 14px; }
+        .login-card button { padding: 10px 14px; border: 0; border-radius: 8px; background: #075f63; color: #fff; font-weight: 600; cursor: pointer; }
+        .login-card button:disabled { opacity: 0.6; cursor: progress; }
+        .login-error { color: #b3261e; font-size: 13px; margin: 0; }
+      `;
+      document.head.appendChild(style);
+    }
+    const overlay = document.createElement("div");
+    overlay.className = "login-overlay";
+    overlay.innerHTML = `
+      <form class="login-card">
+        <p class="eyebrow">Sign in</p>
+        <h2>Dorit Campaign Dashboard</h2>
+        <label>Email<input type="email" name="email" required autocomplete="username" /></label>
+        <label>Password<input type="password" name="password" required autocomplete="current-password" /></label>
+        <p class="login-error" hidden></p>
+        <button type="submit">Sign in</button>
+      </form>
+    `;
+    document.body.appendChild(overlay);
+    const form = overlay.querySelector("form");
+    const errorEl = overlay.querySelector(".login-error");
+    const submitBtn = overlay.querySelector("button[type=submit]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorEl.hidden = true;
+      submitBtn.disabled = true;
+      const fd = new FormData(form);
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.signInWithPassword({
+        email: fd.get("email"),
+        password: fd.get("password"),
+      });
+      submitBtn.disabled = false;
+      if (error) {
+        errorEl.textContent = error.message;
+        errorEl.hidden = false;
+        return;
+      }
+      currentSession = data.session;
+      await loadProfile();
+      overlay.remove();
+      resolve(currentSession);
+    });
+  });
+}
+
+async function requireAuth() {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  const { data } = await client.auth.getSession();
+  if (data?.session) {
+    currentSession = data.session;
+    await loadProfile();
+    return currentSession;
+  }
+  await showLoginOverlay();
+  return currentSession;
+}
+
+function injectSignOutButton() {
+  if (!currentSession) return;
+  if (document.getElementById("signOutButton")) return;
+  const actions = document.querySelector(".topbar-actions");
+  if (!actions) return;
+  const btn = document.createElement("button");
+  btn.id = "signOutButton";
+  btn.type = "button";
+  btn.className = "icon-button";
+  btn.title = currentProfile?.display_name ? `Sign out (${currentProfile.display_name})` : "Sign out";
+  btn.innerHTML = "<span aria-hidden=\"true\">Sign out</span>";
+  btn.addEventListener("click", signOut);
+  actions.insertBefore(btn, actions.firstChild);
+}
+
+async function signOut() {
+  const client = getSupabaseClient();
+  if (client) await client.auth.signOut();
+  currentSession = null;
+  currentProfile = null;
+  location.reload();
+}
+
 async function persistRecord(table, payload) {
   const config = window.CAMPAIGN_CONFIG || {};
-  if (!config.supabaseUrl || !config.supabaseAnonKey) return { mode: "local" };
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !currentSession) return { mode: "local" };
   const url = `${config.supabaseUrl}/functions/v1/upsert-dashboard-record`;
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        ...authHeaders(),
       },
       body: JSON.stringify({ table, payload }),
     });
@@ -1098,10 +1231,10 @@ function rerenderAll() {
 
 async function hydrateFromSupabase() {
   const config = window.CAMPAIGN_CONFIG || {};
-  if (!config.supabaseUrl || !config.supabaseAnonKey) return;
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !currentSession) return;
   try {
     const response = await fetch(`${config.supabaseUrl}/functions/v1/dashboard-read-model`, {
-      headers: { Authorization: `Bearer ${config.supabaseAnonKey}` },
+      headers: authHeaders(),
     });
     if (!response.ok) return;
     const remote = await response.json();
@@ -1208,7 +1341,9 @@ function mapRemoteTraining(card) {
 }
 
 async function init() {
+  await requireAuth();
   await hydrateFromSupabase();
+  injectSignOutButton();
   $("#roleSelect").value = state.activeRole;
   $("#roleSelect").addEventListener("change", (event) => {
     state.activeRole = event.target.value;
