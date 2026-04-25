@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dorit Campaign Intelligence Dashboard</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQHVtUczPndF7kYPngJmJ69XbF2osPk="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Campaign sections">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">D</div>
+          <div>
+            <p class="eyebrow">Internal dashboard</p>
+            <h1>Dorit 2026</h1>
+            <p class="brand-subtitle">Vaughan King School Board Trustee</p>
+          </div>
+        </div>
+
+        <div class="role-block">
+          <label for="roleSelect">Workspace view</label>
+          <select id="roleSelect">
+            <option value="candidate">Candidate</option>
+            <option value="manager" selected>Campaign Manager</option>
+            <option value="volunteer">Volunteer</option>
+          </select>
+        </div>
+
+        <nav class="nav-list" id="navList"></nav>
+
+        <div class="privacy-panel">
+          <p class="eyebrow">Privacy guardrails</p>
+          <p>No individual-level sensitive traits. Track consent-safe outreach, roles, locations, and campaign interactions only.</p>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Election day: Monday, October 26, 2026</p>
+            <h2 id="sectionTitle">Command Center</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="syncButton" type="button" title="Sync local preview data">
+              <span aria-hidden="true">Sync</span>
+            </button>
+            <button class="primary-action" id="briefButton" type="button">Today brief</button>
+          </div>
+        </header>
+
+        <section id="command" class="view active-view" aria-labelledby="sectionTitle"></section>
+        <section id="events" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="crm" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="map" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="goals" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="field" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="training" class="view" aria-labelledby="sectionTitle"></section>
+        <section id="forms" class="view" aria-labelledby="sectionTitle"></section>
+      </main>
+    </div>
+
+    <dialog id="briefDialog" class="brief-dialog">
+      <form method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Candidate briefing</p>
+            <h3>Today on the ground</h3>
+          </div>
+          <button class="ghost-button" value="close" aria-label="Close brief">Close</button>
+        </div>
+        <div id="briefContent" class="brief-content"></div>
+      </form>
+    </dialog>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
