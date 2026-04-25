@@ -472,7 +472,33 @@ function switchSection(sectionId) {
   const section = sections.find((item) => item.id === sectionId);
   $("#sectionTitle").textContent = section.label;
   renderNav();
+  document.querySelectorAll(".bottom-nav .bn-item, .bottom-nav .bn-fab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.section === sectionId);
+  });
+  closeMoreSheet();
   if (sectionId === "map") setTimeout(renderMap, 0);
+}
+
+function openMoreSheet() {
+  const sheet = document.getElementById("moreSheet");
+  const list = document.getElementById("moreSheetList");
+  if (!sheet || !list) return;
+  list.innerHTML = sections
+    .map(
+      (section) => `
+        <button type="button" data-section="${section.id}">
+          <span>${section.label}</span>
+          <span class="nav-kicker">${section.kicker}</span>
+        </button>
+      `,
+    )
+    .join("");
+  sheet.hidden = false;
+}
+
+function closeMoreSheet() {
+  const sheet = document.getElementById("moreSheet");
+  if (sheet) sheet.hidden = true;
 }
 
 function roleBrief() {
@@ -533,7 +559,14 @@ function renderCommand() {
         </div>
         <p>${brief.text}</p>
         <div class="timeline-list">
-          ${brief.actions.map((action) => `<div class="timeline-item"><strong>${action}</strong><p>Owner and due date can be assigned from the update forms once Supabase is connected.</p></div>`).join("")}
+          ${brief.actions.map((action, i) => `
+            <article class="timeline-item action-card">
+              <div class="action-icon">${actionIcon(i)}</div>
+              <strong>${action}</strong>
+              <p>Owner and due date can be assigned from the update forms once Supabase is connected.</p>
+              <a class="action-link" href="#" data-jump="forms">Open task <span aria-hidden="true">â†’</span></a>
+            </article>
+          `).join("")}
         </div>
       </section>
 
@@ -573,15 +606,73 @@ function metricCard(metric) {
     <article class="metric-card">
       <div class="metric-topline">
         <span class="metric-label">${metric.label}</span>
-        <span class="status-pill">${progress}%</span>
+        ${donutSVG(progress, metric.color)}
       </div>
       <div class="metric-value">${formatNumber(metric.actual)}${metric.unit}</div>
+      ${sparklineSVG(metric)}
       <div class="progress-track" aria-label="${progress}% complete">
         <div class="progress-fill" style="--progress:${progress}%;--fill:${metric.color}"></div>
       </div>
       <p>Target: ${formatNumber(metric.target)}${metric.unit}</p>
     </article>
   `;
+}
+
+function makeSpark(metric) {
+  const target = metric.target || 1;
+  const actual = metric.actual || 0;
+  const seed = [...metric.key].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return Array.from({ length: 12 }, (_, i) => {
+    const t = i / 11;
+    const base = actual * (0.18 + 0.82 * t);
+    const wobble = Math.sin(seed * 0.7 + i * 1.3) * (target * 0.025);
+    return Math.max(0, base + wobble);
+  });
+}
+
+function sparklineSVG(metric) {
+  const points = makeSpark(metric);
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points, 0);
+  const range = max - min || 1;
+  const w = 100;
+  const h = 30;
+  const coords = points.map((v, i) => {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((v - min) / range) * (h - 2) - 1;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const path = `M${coords.join(" L")}`;
+  const fillPath = `${path} L${w},${h} L0,${h} Z`;
+  const safeColor = metric.color || "var(--teal)";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${fillPath}" fill="${safeColor}" opacity="0.12"/>
+    <path d="${path}" fill="none" stroke="${safeColor}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function donutSVG(percent, color) {
+  const r = 16;
+  const c = 2 * Math.PI * r;
+  const filled = Math.max(0, Math.min(100, percent)) / 100 * c;
+  const fill = color || "var(--teal)";
+  return `<svg class="donut" viewBox="0 0 40 40" aria-hidden="true">
+    <circle cx="20" cy="20" r="${r}" fill="none" stroke="#ebe5d8" stroke-width="4"/>
+    <circle cx="20" cy="20" r="${r}" fill="none" stroke="${fill}" stroke-width="4" stroke-linecap="round"
+      stroke-dasharray="${filled.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 20 20)"/>
+    <text x="20" y="22.5" text-anchor="middle" font-size="10" font-weight="800" fill="#18211f" font-family="Inter, sans-serif">${percent}%</text>
+  </svg>`;
+}
+
+const ACTION_ICONS = [
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 10v4l9 5V5zM16 7v10c1.66-1 3-2.83 3-5s-1.34-4-3-5z"/></svg>',
+  '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
+  '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+];
+
+function actionIcon(i) {
+  return ACTION_ICONS[i % ACTION_ICONS.length];
 }
 
 function eventRow(event) {
@@ -1350,13 +1441,33 @@ async function init() {
     saveState();
     rerenderAll();
   });
-  $("#navList").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-section]");
-    if (button) switchSection(button.dataset.section);
-  });
   document.body.addEventListener("click", (event) => {
+    const moreBtn = event.target.closest("#bottomMoreBtn");
+    if (moreBtn) {
+      const sheet = document.getElementById("moreSheet");
+      if (sheet && sheet.hidden) openMoreSheet();
+      else closeMoreSheet();
+      return;
+    }
+    const closeBtn = event.target.closest("#moreSheetClose");
+    if (closeBtn) {
+      closeMoreSheet();
+      return;
+    }
+    if (event.target.id === "moreSheet") {
+      closeMoreSheet();
+      return;
+    }
+    const sectionBtn = event.target.closest("[data-section]");
+    if (sectionBtn) {
+      switchSection(sectionBtn.dataset.section);
+      return;
+    }
     const jump = event.target.closest("[data-jump]");
-    if (jump) switchSection(jump.dataset.jump);
+    if (jump) {
+      event.preventDefault();
+      switchSection(jump.dataset.jump);
+    }
   });
   $("#briefButton").addEventListener("click", showBrief);
   $("#syncButton").addEventListener("click", () => toast("Local preview data is current. Supabase sync activates when credentials are configured."));
