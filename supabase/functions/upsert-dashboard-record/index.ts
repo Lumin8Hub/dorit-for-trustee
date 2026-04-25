@@ -94,7 +94,7 @@ function sanitizePayload(table: string, payload: Record<string, unknown>) {
       stakeholder_name: payload.stakeholder_name ?? payload.stakeholder,
       method: payload.method,
       outcome: payload.outcome,
-      follow_up_date: payload.follow_up_date ?? payload.followUp || null,
+      follow_up_date: (payload.follow_up_date ?? payload.followUp) || null,
       status: payload.status ?? "Open",
     };
   }
