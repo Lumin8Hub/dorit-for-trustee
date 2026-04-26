@@ -8,7 +8,7 @@ Internal desktop-first campaign dashboard for Dorit for Vaughan King School Boar
 - Role-aware views for Candidate, Campaign Manager, and Volunteer
 - Event calendar, stakeholder CRM, map intelligence, goals, field ops, training guide, and update forms
 - Supabase schema and Edge Function contracts under `supabase/`
-- Backend functions for `dashboard-read-model`, `upsert-dashboard-record`, `campaign-rollups`, and `geocode-location`
+- Backend functions for `dashboard-read-model`, `upsert-dashboard-record`, `approve-account`, `campaign-rollups`, and `geocode-location`
 - Local preview mode using `localStorage`
 - Optional Supabase mode through `window.CAMPAIGN_CONFIG`
 
@@ -34,6 +34,14 @@ Then visit `http://localhost:5173`.
 ```
 
 The dashboard will keep working locally if Supabase is not configured.
+
+## Account approval workflow
+
+- New signups are created as volunteer accounts with `approval_status = pending`.
+- Pending, rejected, and suspended users cannot access campaign data.
+- Candidate and Campaign Manager accounts can approve, reject, suspend, or reactivate volunteers from the Accounts section.
+- Initial Candidate/Campaign Manager users should be created manually in Supabase Auth, then their rows in `public.profiles` should be set to `role = 'candidate'` or `role = 'manager'` and `approval_status = 'approved'`.
+- Deploy the `approve-account` Edge Function before using the in-app approval buttons.
 
 ## Privacy model
 
