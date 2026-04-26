@@ -130,6 +130,18 @@ button {
   font-weight: 750;
 }
 
+.role-block strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.profile-meta {
+  margin: 0 0 10px;
+  color: #d9e4df;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .role-block select {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.24);
@@ -528,6 +540,11 @@ button {
   gap: 10px;
 }
 
+.account-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .event-row {
   display: grid;
   grid-template-columns: 130px minmax(0, 1fr) auto;
@@ -595,7 +612,8 @@ button {
   gap: 16px;
 }
 
-#campaignMap {
+#campaignMap,
+#volunteerMap {
   min-height: 620px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -708,6 +726,38 @@ button {
   background: var(--panel);
   color: var(--ink);
   box-shadow: var(--shadow);
+}
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 37, 35, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.account-state-page {
+  min-height: 100vh;
+}
+
+.login-card {
+  background: var(--panel);
+  padding: 28px 32px;
+  border-radius: var(--radius);
+  width: clamp(320px, 38vw, 520px);
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+
+.login-help {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
 }
 
 .brief-dialog::backdrop {
@@ -932,6 +982,7 @@ button {
   }
 
   #campaignMap,
+  #volunteerMap,
   .schematic-map {
     min-height: 440px;
   }
