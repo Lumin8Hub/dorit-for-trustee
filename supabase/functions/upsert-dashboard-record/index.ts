@@ -7,6 +7,8 @@ const allowedTables = new Set([
   "canvass_zones",
   "stakeholders",
   "map_locations",
+  "volunteer_availability",
+  "volunteer_reports",
 ]);
 
 const corsHeaders = {
@@ -35,22 +37,32 @@ Deno.serve(async (req) => {
 
   const profile = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, approval_status")
     .eq("id", userData.user.id)
     .single();
 
   const role = profile.data?.role ?? "volunteer";
+  const approved = profile.data?.approval_status === "approved";
+  if (!approved) return json({ error: "Account is not approved" }, 403);
   const managerOnly = ["events", "campaign_metrics", "canvass_zones", "stakeholders", "map_locations"];
   if (managerOnly.includes(body.table) && !["candidate", "manager"].includes(role)) {
     return json({ error: "Insufficient role" }, 403);
   }
+  const volunteerSafe = ["outreach_logs", "volunteer_availability", "volunteer_reports"];
+  if (role === "volunteer" && !volunteerSafe.includes(body.table)) {
+    return json({ error: "Volunteers cannot update this table" }, 403);
+  }
 
   const payload = sanitizePayload(body.table, body.payload ?? {});
   if (body.table === "outreach_logs") payload.created_by = userData.user.id;
+  if (body.table === "volunteer_reports") payload.volunteer_profile_id = userData.user.id;
+  if (body.table === "volunteer_availability") payload.volunteer_profile_id = userData.user.id;
 
-  const result = payload.id
-    ? await supabase.from(body.table).upsert(payload).select().single()
-    : await supabase.from(body.table).insert(payload).select().single();
+  const result = body.table === "volunteer_availability"
+    ? await supabase.from(body.table).upsert(payload, { onConflict: "volunteer_profile_id" }).select().single()
+    : payload.id
+      ? await supabase.from(body.table).upsert(payload).select().single()
+      : await supabase.from(body.table).insert(payload).select().single();
 
   if (result.error) return json({ error: result.error.message }, 400);
 
@@ -96,6 +108,28 @@ function sanitizePayload(table: string, payload: Record<string, unknown>) {
       outcome: payload.outcome,
       follow_up_date: (payload.follow_up_date ?? payload.followUp) || null,
       status: payload.status ?? "Open",
+    };
+  }
+
+  if (table === "volunteer_availability") {
+    return {
+      weekdays: payload.weekdays ?? "",
+      weekends: payload.weekends ?? "",
+      communities: payload.communities ?? "",
+      interests: payload.interests ?? "",
+      notes: payload.notes ?? "",
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  if (table === "volunteer_reports") {
+    return {
+      assignment_id: payload.assignment_id || null,
+      report_type: payload.report_type ?? "General note",
+      doors_knocked: Number(payload.doors_knocked ?? 0),
+      hard_ids: Number(payload.hard_ids ?? 0),
+      issue_note: payload.issue_note ?? "",
+      shift_note: payload.shift_note ?? "",
     };
   }
 
