@@ -2,14 +2,22 @@ const ELECTION_DAY = new Date("2026-10-26T20:00:00-04:00");
 const STORAGE_KEY = "dorit-dashboard-preview-state";
 
 const sections = [
-  { id: "command", label: "Command Center", kicker: "Live" },
-  { id: "events", label: "Events Calendar", kicker: "Plan" },
-  { id: "crm", label: "Stakeholder CRM", kicker: "Build" },
-  { id: "map", label: "Map Intelligence", kicker: "Field" },
-  { id: "goals", label: "Campaign Goals", kicker: "Track" },
-  { id: "field", label: "Field Ops", kicker: "Move" },
-  { id: "training", label: "Volunteer Briefing", kicker: "Train" },
-  { id: "forms", label: "Update Forms", kicker: "Input" },
+  { id: "command", label: "Command Center", kicker: "Live", roles: ["candidate", "manager"] },
+  { id: "today", label: "Today Brief", kicker: "Go", roles: ["candidate"] },
+  { id: "events", label: "Events Calendar", kicker: "Plan", roles: ["candidate", "manager"] },
+  { id: "relationships", label: "Relationships", kicker: "Call", roles: ["candidate"] },
+  { id: "crm", label: "Stakeholder CRM", kicker: "Build", roles: ["manager"] },
+  { id: "map", label: "Map Intelligence", kicker: "Field", roles: ["candidate", "manager"] },
+  { id: "goals", label: "Campaign Goals", kicker: "Track", roles: ["manager"] },
+  { id: "field", label: "Field Ops", kicker: "Move", roles: ["manager"] },
+  { id: "forms", label: "Update Forms", kicker: "Input", roles: ["manager"] },
+  { id: "accounts", label: "Accounts", kicker: "Approve", roles: ["candidate", "manager"] },
+  { id: "field-notes", label: "Field Notes", kicker: "Log", roles: ["candidate"] },
+  { id: "my-shift", label: "My Shift", kicker: "Start", roles: ["volunteer"] },
+  { id: "my-zone", label: "My Zone", kicker: "Map", roles: ["volunteer"] },
+  { id: "training", label: "Volunteer Briefing", kicker: "Train", roles: ["volunteer"] },
+  { id: "submit-report", label: "Submit Report", kicker: "Log", roles: ["volunteer"] },
+  { id: "availability", label: "Availability", kicker: "Plan", roles: ["volunteer"] },
 ];
 
 const seedState = {
@@ -434,6 +442,91 @@ const seedState = {
       script: "Schomberg families deserve a trustee who shows up here, not just at election time.",
     },
   ],
+  localProfile: {
+    id: "local-manager",
+    display_name: "Local Campaign Manager",
+    email: "local.manager@example.com",
+    role: "manager",
+    approval_status: "approved",
+  },
+  accounts: [
+    {
+      id: "acct-pending-1",
+      display_name: "Maya Volunteer",
+      email: "maya.volunteer@example.com",
+      phone: "Optional",
+      role: "volunteer",
+      approval_status: "pending",
+      community_preference: "Nobleton",
+      zone_preference: "zone-nobleton",
+      availability_note: "Weekends after 10 AM",
+      volunteer_interests: ["Canvassing", "Events"],
+      created_at: "2026-04-25",
+    },
+    {
+      id: "acct-volunteer-1",
+      display_name: "Alex Field Volunteer",
+      email: "alex.volunteer@example.com",
+      phone: "Optional",
+      role: "volunteer",
+      approval_status: "approved",
+      community_preference: "New Kleinburg",
+      zone_preference: "zone-new-kleinburg",
+      availability_note: "Tuesday evenings and Saturdays",
+      volunteer_interests: ["Door knocking", "Literature drops"],
+      created_at: "2026-04-18",
+    },
+  ],
+  approvalLog: [
+    {
+      id: "approval-1",
+      profile_id: "acct-volunteer-1",
+      actor_name: "Local Campaign Manager",
+      action: "approve",
+      note: "Seed approval for preview mode.",
+      created_at: "2026-04-19",
+    },
+  ],
+  assignments: [
+    {
+      id: "assign-1",
+      volunteer_profile_id: "acct-volunteer-1",
+      title: "Saturday New Kleinburg canvass",
+      type: "Canvass",
+      date: "2026-05-09",
+      start_time: "10:00",
+      end_time: "13:00",
+      location: "Garnet Williams Way staging point",
+      zone_id: "zone-new-kleinburg",
+      instructions: "Meet the shift captain, pick up literature, and log doors plus issue notes after the shift.",
+      status: "assigned",
+    },
+    {
+      id: "assign-2",
+      volunteer_profile_id: "acct-volunteer-1",
+      title: "Nobleton Victoria Day prep call",
+      type: "Event",
+      date: "2026-05-12",
+      start_time: "19:00",
+      end_time: "19:45",
+      location: "Phone bank",
+      zone_id: "zone-nobleton",
+      instructions: "Confirm parade volunteers and flag unanswered questions for the campaign manager.",
+      status: "assigned",
+    },
+  ],
+  availability: [
+    {
+      id: "availability-1",
+      volunteer_profile_id: "acct-volunteer-1",
+      weekdays: "Tuesday evenings",
+      weekends: "Saturday mornings",
+      communities: "New Kleinburg, Nobleton",
+      interests: "Canvassing, literature drops",
+      notes: "Can drive two other volunteers.",
+    },
+  ],
+  volunteerReports: [],
 };
 
 const saved = localStorage.getItem(STORAGE_KEY);
@@ -447,13 +540,42 @@ const $ = (selector) => document.querySelector(selector);
 const formatNumber = (value) => new Intl.NumberFormat("en-CA").format(value);
 const daysToElection = () => Math.max(0, Math.ceil((ELECTION_DAY - new Date()) / 86400000));
 const pct = (actual, target) => Math.min(100, Math.round((actual / target) * 100));
+const canManageAccounts = () => ["candidate", "manager"].includes(effectiveProfile().role);
+const isApprovedProfile = (profile = effectiveProfile()) => (profile.approval_status || "approved") === "approved";
+
+function effectiveProfile() {
+  if (currentProfile) return normalizeProfile(currentProfile);
+  return normalizeProfile(state.localProfile || { role: state.activeRole || "manager", approval_status: "approved" });
+}
+
+function normalizeProfile(profile) {
+  const role = profile.role || "volunteer";
+  return {
+    ...profile,
+    display_name: profile.display_name || profile.displayName || profile.email || "Campaign user",
+    email: profile.email || "",
+    role,
+    approval_status: profile.approval_status || (role === "volunteer" ? "pending" : "approved"),
+  };
+}
+
+function roleSections() {
+  const profile = effectiveProfile();
+  if (!isApprovedProfile(profile)) return [];
+  return sections.filter((section) => section.roles.includes(profile.role));
+}
+
+function sectionById(sectionId) {
+  return sections.find((item) => item.id === sectionId);
+}
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 function renderNav() {
-  $("#navList").innerHTML = sections
+  const visible = roleSections();
+  $("#navList").innerHTML = visible
     .map(
       (section) => `
         <button class="nav-button ${section.id === activeSection ? "active" : ""}" data-section="${section.id}" type="button">
@@ -463,27 +585,74 @@ function renderNav() {
       `,
     )
     .join("");
+  renderBottomNav(visible);
+  renderProfileBlock();
 }
 
 function switchSection(sectionId) {
-  activeSection = sectionId;
+  const visible = roleSections();
+  const target = visible.some((section) => section.id === sectionId) ? sectionId : visible[0]?.id || "command";
+  if (!document.getElementById(target)) return;
+  activeSection = target;
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("active-view"));
-  document.getElementById(sectionId).classList.add("active-view");
-  const section = sections.find((item) => item.id === sectionId);
+  document.getElementById(target).classList.add("active-view");
+  const section = sectionById(target);
   $("#sectionTitle").textContent = section.label;
   renderNav();
   document.querySelectorAll(".bottom-nav .bn-item, .bottom-nav .bn-fab").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.section === sectionId);
+    btn.classList.toggle("active", btn.dataset.section === target);
   });
   closeMoreSheet();
-  if (sectionId === "map") setTimeout(renderMap, 0);
+  if (target === "map" || target === "my-zone") setTimeout(renderMap, 0);
+}
+
+function renderProfileBlock() {
+  const profile = effectiveProfile();
+  const name = $("#profileName");
+  const role = $("#profileRole");
+  const status = $("#profileStatus");
+  if (!name || !role || !status) return;
+  name.textContent = profile.display_name;
+  role.textContent = `${prettyRole(profile.role)}${profile.email ? ` - ${profile.email}` : ""}`;
+  status.textContent = profile.approval_status;
+  status.className = `status-pill ${profile.approval_status === "approved" ? "open" : "warn"}`;
+}
+
+function prettyRole(role) {
+  return role === "manager" ? "Campaign Manager" : role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function renderBottomNav(visible = roleSections()) {
+  const bottom = document.getElementById("bottomNav");
+  if (!bottom) return;
+  const primary = visible.slice(0, 3);
+  const addTarget = visible.find((section) => ["forms", "field-notes", "submit-report"].includes(section.id)) || primary[0];
+  bottom.innerHTML = `
+    ${primary.map((section) => bottomNavButton(section)).join("")}
+    ${addTarget ? `<button class="bn-fab" data-section="${addTarget.id}" type="button" aria-label="${addTarget.label}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+    </button>` : ""}
+    <button class="bn-item" id="bottomMoreBtn" type="button" aria-haspopup="true">
+      <svg class="bn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="18" cy="12" r="2" fill="currentColor"/></svg>
+      <span>More</span>
+    </button>
+  `;
+}
+
+function bottomNavButton(section) {
+  return `
+    <button class="bn-item ${section.id === activeSection ? "active" : ""}" data-section="${section.id}" type="button">
+      <svg class="bn-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v2H4zM4 11h16v2H4zM4 17h10v2H4z"/></svg>
+      <span>${section.label.split(" ")[0]}</span>
+    </button>
+  `;
 }
 
 function openMoreSheet() {
   const sheet = document.getElementById("moreSheet");
   const list = document.getElementById("moreSheetList");
   if (!sheet || !list) return;
-  list.innerHTML = sections
+  list.innerHTML = roleSections()
     .map(
       (section) => `
         <button type="button" data-section="${section.id}">
@@ -527,7 +696,7 @@ function renderCommand() {
     .filter((event) => new Date(event.date) >= new Date("2026-04-25"))
     .sort((a, b) => new Date(a.date) - new Date(b.date))
     .slice(0, 4);
-  const hardIds = state.metrics.find((metric) => metric.key === "hardIds");
+  const hardIds = state.metrics.find((metric) => metric.key === "hardIds") || { actual: 0, target: 4000 };
   const brief = roleBrief();
 
   $("#command").innerHTML = `
@@ -543,7 +712,7 @@ function renderCommand() {
             ${deadlineCard("Days to election", daysToElection(), "October 26, 2026")}
             ${deadlineCard("Hard-ID path", `${pct(hardIds.actual, hardIds.target)}%`, `${formatNumber(hardIds.actual)} of ${formatNumber(hardIds.target)}`)}
             ${deadlineCard("Tier 1 events", state.events.filter((event) => event.tier === 1).length, "Must-attend touchpoints")}
-            ${deadlineCard("Open follow-ups", state.outreach.filter((item) => item.status !== "Closed").length, "CRM attention needed")}
+            ${deadlineCard("Open follow-ups", (state.outreach || []).filter((item) => item.status !== "Closed").length, "CRM attention needed")}
           </div>
         </div>
         <div class="hero-image" role="img" aria-label="Campaign operations dashboard placeholder visual"></div>
@@ -594,6 +763,168 @@ function renderCommand() {
       </section>
     </div>
   `;
+}
+
+function renderToday() {
+  const candidateEvents = [...state.events]
+    .filter((event) => event.tier === 1)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 5);
+  const p1Stakeholders = state.stakeholders.filter((item) => item.priority === "P1").slice(0, 4);
+  $("#today").innerHTML = `
+    <div class="layout-stack">
+      <section class="role-brief">
+        <div class="card-topline">
+          <div>
+            <p class="eyebrow">Candidate cockpit</p>
+            <h4>Dorit's next best moves</h4>
+          </div>
+          <span class="role-pill half-pill">Candidate</span>
+        </div>
+        <div class="timeline-list">
+          <article class="timeline-item"><strong>Show up</strong><p>Prioritize the next Tier 1 event where Dorit personally needs to be visible.</p></article>
+          <article class="timeline-item"><strong>Follow up</strong><p>Call two P1 relationship contacts and log a consent-safe note.</p></article>
+          <article class="timeline-item"><strong>Prepare remarks</strong><p>Use school capacity, visibility, mental health, and accountability as the local frame.</p></article>
+          <article class="timeline-item"><strong>Capture proof</strong><p>After every appearance, add one field note and one follow-up action.</p></article>
+        </div>
+      </section>
+      <section>
+        <div class="section-heading"><div><p class="eyebrow">Upcoming Tier 1 appearances</p><h3>Where Dorit should be seen</h3></div></div>
+        <div class="event-list">${candidateEvents.map(eventRow).join("")}</div>
+      </section>
+      <section>
+        <div class="section-heading"><div><p class="eyebrow">Relationship priorities</p><h3>Candidate follow-ups</h3></div></div>
+        <div class="stakeholder-grid">${p1Stakeholders.map(relationshipCard).join("")}</div>
+      </section>
+    </div>
+  `;
+}
+
+function renderRelationships() {
+  const records = state.stakeholders.filter((item) => item.priority === "P1");
+  $("#relationships").innerHTML = `
+    <div class="layout-stack">
+      <section class="data-panel">
+        <p class="eyebrow">Candidate relationship map</p>
+        <h4>High-trust relationships Dorit should personally own</h4>
+        <p>This view keeps the candidate focused on strategic conversations, not CRM administration. It highlights priority schools, faith communities, local organizations, media, and endorsement paths.</p>
+      </section>
+      <div class="stakeholder-grid">${records.map(relationshipCard).join("")}</div>
+    </div>
+  `;
+}
+
+function relationshipCard(item) {
+  return `
+    <article class="card">
+      <div class="card-topline">
+        <h4>${item.name}</h4>
+        <span class="tier-pill">${item.priority}</span>
+      </div>
+      <p><strong>${item.category}</strong> - ${item.type} - ${item.half}</p>
+      <p>${item.why}</p>
+      <p><strong>Candidate ask:</strong> ${item.approach}</p>
+    </article>
+  `;
+}
+
+function renderFieldNotes() {
+  $("#field-notes").innerHTML = `
+    <div class="layout-stack">
+      <section class="data-panel">
+        <p class="eyebrow">Candidate field notes</p>
+        <h4>Log what Dorit heard and promised</h4>
+        <p>Keep notes consent-safe: organization, context, issue, and follow-up. Do not record sensitive traits about individual voters.</p>
+      </section>
+      <div class="form-grid">
+        <section class="form-panel">
+          <h4>Log appearance or stakeholder note</h4>
+          <form id="candidateNoteForm">
+            <label>Context<input name="stakeholder" required placeholder="Event, school, organization, or contact role" /></label>
+            <label>Method<select name="method"><option>Event</option><option>Meeting</option><option>Phone</option><option>Email</option></select></label>
+            <label>Note<textarea name="outcome" required placeholder="What was heard, promised, or needs follow-up?"></textarea></label>
+            <label>Follow-up date<input name="followUp" type="date" /></label>
+            <button class="primary-action" type="submit">Save field note</button>
+          </form>
+        </section>
+        <section class="data-panel">
+          <h4>Recent notes</h4>
+          <div class="event-list">${state.outreach.slice(0, 6).map((item) => `<article class="crm-record"><strong>${item.stakeholder}</strong><p>${item.outcome}</p><p>Follow-up: ${item.followUp}</p></article>`).join("")}</div>
+        </section>
+      </div>
+    </div>
+  `;
+  $("#candidateNoteForm").addEventListener("submit", handleOutreachSubmit);
+}
+
+function renderAccounts() {
+  if (!canManageAccounts()) {
+    $("#accounts").innerHTML = `<div class="empty-state">Account administration is only available to Candidate and Campaign Manager accounts.</div>`;
+    return;
+  }
+  const pending = state.accounts.filter((account) => account.approval_status === "pending");
+  const active = state.accounts.filter((account) => account.approval_status !== "pending");
+  $("#accounts").innerHTML = `
+    <div class="layout-stack">
+      <section class="data-panel">
+        <div class="card-topline">
+          <div>
+            <p class="eyebrow">Volunteer account approvals</p>
+            <h4>Review new volunteer signups before dashboard access</h4>
+          </div>
+          <span class="status-pill warn">${pending.length} pending</span>
+        </div>
+        <p>Candidate and Campaign Manager accounts can approve, reject, suspend, and reactivate volunteers. Pending, rejected, and suspended users cannot read campaign data.</p>
+      </section>
+      <section>
+        <div class="section-heading"><div><p class="eyebrow">Pending</p><h3>New volunteer requests</h3></div></div>
+        <div class="event-list">${pending.length ? pending.map(accountCard).join("") : `<div class="empty-state">No pending volunteer accounts.</div>`}</div>
+      </section>
+      <section>
+        <div class="section-heading"><div><p class="eyebrow">Account roster</p><h3>Approved, rejected, and suspended users</h3></div></div>
+        <div class="event-list">${active.map(accountCard).join("")}</div>
+      </section>
+      <section class="data-panel">
+        <div class="section-heading"><div><p class="eyebrow">Audit trail</p><h3>Approval history</h3></div></div>
+        <div class="event-list">${state.approvalLog.map((log) => `<article class="crm-record"><strong>${log.action}</strong><p>${log.actor_name || "Approver"} updated ${accountName(log.profile_id)} on ${log.created_at?.slice?.(0, 10) || log.created_at}.</p><p>${log.note || ""}</p></article>`).join("")}</div>
+      </section>
+    </div>
+  `;
+  document.querySelectorAll("[data-account-action]").forEach((button) => {
+    button.addEventListener("click", () => approveAccount(button.dataset.profileId, button.dataset.accountAction));
+  });
+}
+
+function accountCard(account) {
+  const actions = account.approval_status === "pending"
+    ? ["approve", "reject"]
+    : account.approval_status === "suspended"
+      ? ["reactivate"]
+      : ["suspend"];
+  return `
+    <article class="event-row">
+      <div>
+        <span class="status-pill ${account.approval_status === "approved" ? "open" : "warn"}">${account.approval_status}</span>
+      </div>
+      <div>
+        <h4>${account.display_name}</h4>
+        <p>${account.email} - ${prettyRole(account.role)}</p>
+        <div class="event-meta">
+          <span>Community: ${account.community_preference || "Not provided"}</span>
+          <span>Zone: ${zoneName(account.zone_preference)}</span>
+          <span>Interests: ${(account.volunteer_interests || []).join(", ") || "Not provided"}</span>
+        </div>
+        <p>${account.availability_note || ""}</p>
+      </div>
+      <div class="account-actions">
+        ${actions.map((action) => `<button class="table-action" type="button" data-profile-id="${account.id}" data-account-action="${action}">${action}</button>`).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function accountName(profileId) {
+  return state.accounts.find((account) => account.id === profileId)?.display_name || "an account";
 }
 
 function deadlineCard(label, value, detail) {
@@ -831,7 +1162,8 @@ function renderMapView() {
 }
 
 function renderMap() {
-  const target = $("#campaignMap");
+  const targetId = activeSection === "my-zone" ? "volunteerMap" : "campaignMap";
+  const target = document.getElementById(targetId);
   if (!target) return;
   if (!window.L) {
     target.innerHTML = schematicMap();
@@ -841,12 +1173,20 @@ function renderMap() {
     mapInstance.remove();
     mapInstance = null;
   }
-  mapInstance = L.map("campaignMap", { scrollWheelZoom: false }).setView([43.91, -79.58], 11);
+  mapInstance = L.map(targetId, { scrollWheelZoom: false }).setView([43.91, -79.58], 11);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(mapInstance);
-  state.locations.forEach((loc) => {
+  const assignedHalves = new Set(
+    volunteerAssignments()
+      .map((assignment) => state.zones.find((zone) => zone.id === assignment.zone_id)?.half)
+      .filter(Boolean),
+  );
+  const locations = activeSection === "my-zone"
+    ? state.locations.filter((loc) => assignedHalves.has(loc.half) || loc.half === "Both")
+    : state.locations;
+  locations.filter((loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng)).forEach((loc) => {
     const marker = L.circleMarker([loc.lat, loc.lng], {
       radius: loc.tier === 1 ? 9 : 7,
       color: "#ffffff",
@@ -992,6 +1332,128 @@ function renderTraining() {
   `;
 }
 
+function renderMyShift() {
+  const assignments = volunteerAssignments();
+  $("#my-shift").innerHTML = `
+    <div class="layout-stack">
+      <section class="role-brief">
+        <div class="card-topline">
+          <div>
+            <p class="eyebrow">Volunteer shift view</p>
+            <h4>Your next campaign assignments</h4>
+          </div>
+          <span class="role-pill half-pill">Volunteer</span>
+        </div>
+        <p>Start here before a shift. Review the location, instructions, and privacy-safe reporting expectations.</p>
+      </section>
+      <div class="event-list">${assignments.length ? assignments.map(assignmentCard).join("") : `<div class="empty-state">No assignments yet. Submit your availability so the campaign manager can place you.</div>`}</div>
+    </div>
+  `;
+}
+
+function renderMyZone() {
+  const assignments = volunteerAssignments();
+  const zoneIds = [...new Set(assignments.map((assignment) => assignment.zone_id).filter(Boolean))];
+  const zones = state.zones.filter((zone) => zoneIds.includes(zone.id));
+  const locations = state.locations.filter((loc) => zones.some((zone) => zone.half === loc.half)).slice(0, 6);
+  $("#my-zone").innerHTML = `
+    <div class="layout-stack">
+      <section class="data-panel">
+        <p class="eyebrow">Volunteer map</p>
+        <h4>Your assigned area</h4>
+        <p>This volunteer view shows assigned zones and practical staging locations. Full CRM and strategic notes are hidden.</p>
+      </section>
+      <div class="zone-grid">${zones.length ? zones.map(zoneCard).join("") : `<div class="empty-state">No assigned zone yet.</div>`}</div>
+      <section class="map-layout">
+        <div id="volunteerMap" aria-label="Volunteer campaign map"></div>
+        <aside class="map-side-panel">
+          <h4>Useful locations</h4>
+          ${locations.map((loc) => `<article class="card"><strong>${loc.name}</strong><p>${loc.type} - ${loc.note}</p></article>`).join("")}
+        </aside>
+      </section>
+    </div>
+  `;
+}
+
+function renderSubmitReport() {
+  const assignments = volunteerAssignments();
+  $("#submit-report").innerHTML = `
+    <div class="layout-stack">
+      <section class="data-panel">
+        <p class="eyebrow">Volunteer report</p>
+        <h4>Submit shift notes and totals</h4>
+        <p>Report doors, hard IDs, and campaign issues. Do not record sensitive traits or assign persona labels to individual people.</p>
+      </section>
+      <section class="form-panel">
+        <form id="volunteerReportForm">
+          <label>Assignment<select name="assignment_id">${assignments.map((assignment) => `<option value="${assignment.id}">${assignment.title}</option>`).join("")}<option value="">General volunteer note</option></select></label>
+          <label>Report type<select name="report_type"><option>Canvass</option><option>Event</option><option>Phone bank</option><option>General note</option></select></label>
+          <label>Doors knocked<input name="doors_knocked" type="number" min="0" value="0" /></label>
+          <label>Hard IDs<input name="hard_ids" type="number" min="0" value="0" /></label>
+          <label>Issue note<textarea name="issue_note" placeholder="What did voters or attendees raise?"></textarea></label>
+          <label>Shift note<textarea name="shift_note" required placeholder="What happened and what should the campaign know?"></textarea></label>
+          <button class="primary-action" type="submit">Submit report</button>
+        </form>
+      </section>
+    </div>
+  `;
+  $("#volunteerReportForm").addEventListener("submit", handleVolunteerReportSubmit);
+}
+
+function renderAvailability() {
+  const availability = volunteerAvailability();
+  $("#availability").innerHTML = `
+    <div class="layout-stack">
+      <section class="form-panel">
+        <h4>Update availability</h4>
+        <form id="availabilityForm">
+          <label>Weekday availability<input name="weekdays" value="${availability?.weekdays || ""}" placeholder="Example: Tuesday evenings" /></label>
+          <label>Weekend availability<input name="weekends" value="${availability?.weekends || ""}" placeholder="Example: Saturday mornings" /></label>
+          <label>Preferred communities<input name="communities" value="${availability?.communities || ""}" placeholder="New Kleinburg, Nobleton" /></label>
+          <label>Volunteer interests<input name="interests" value="${availability?.interests || ""}" placeholder="Canvassing, events, calls" /></label>
+          <label>Notes<textarea name="notes" placeholder="Anything the campaign manager should know?">${availability?.notes || ""}</textarea></label>
+          <button class="primary-action" type="submit">Save availability</button>
+        </form>
+      </section>
+    </div>
+  `;
+  $("#availabilityForm").addEventListener("submit", handleAvailabilitySubmit);
+}
+
+function assignmentCard(assignment) {
+  return `
+    <article class="event-row">
+      <div>
+        <div class="event-date">${assignment.date}</div>
+        <span class="tier-pill">${assignment.type}</span>
+      </div>
+      <div>
+        <h4>${assignment.title}</h4>
+        <p>${assignment.start_time || ""}${assignment.end_time ? `-${assignment.end_time}` : ""} at ${assignment.location}</p>
+        <p>${assignment.instructions}</p>
+        <div class="event-meta"><span>Zone: ${zoneName(assignment.zone_id)}</span><span>Status: ${assignment.status}</span></div>
+      </div>
+      <button class="table-action" type="button" data-jump="submit-report">Report</button>
+    </article>
+  `;
+}
+
+function volunteerAssignments() {
+  const profile = effectiveProfile();
+  const id = profile.id || "acct-volunteer-1";
+  const assignments = state.assignments.filter((assignment) => assignment.volunteer_profile_id === id);
+  return assignments.length ? assignments : state.assignments.filter((assignment) => assignment.volunteer_profile_id === "acct-volunteer-1");
+}
+
+function volunteerAvailability() {
+  const profile = effectiveProfile();
+  return state.availability.find((item) => item.volunteer_profile_id === profile.id) || state.availability[0];
+}
+
+function zoneName(zoneId) {
+  return state.zones.find((zone) => zone.id === zoneId)?.name || "Not assigned";
+}
+
 function personaCard(persona) {
   return `
     <article class="persona-card">
@@ -1060,6 +1522,105 @@ function renderForms() {
   bindForms();
 }
 
+async function handleOutreachSubmit(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  state.outreach.unshift({
+    id: `out-${Date.now()}`,
+    date: new Date().toISOString().slice(0, 10),
+    stakeholder: data.stakeholder,
+    method: data.method,
+    outcome: data.outcome,
+    followUp: data.followUp || "Not set",
+    status: "Open",
+  });
+  await persistRecord("outreach_logs", data);
+  saveState();
+  rerenderAll();
+  toast("Outreach logged. Sensitive traits were not requested or stored.");
+}
+
+async function handleVolunteerReportSubmit(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  const report = {
+    id: `report-${Date.now()}`,
+    volunteer_profile_id: effectiveProfile().id || "local-volunteer",
+    created_at: new Date().toISOString(),
+    assignment_id: data.assignment_id || null,
+    report_type: data.report_type,
+    doors_knocked: Number(data.doors_knocked || 0),
+    hard_ids: Number(data.hard_ids || 0),
+    issue_note: data.issue_note || "",
+    shift_note: data.shift_note,
+  };
+  state.volunteerReports.unshift(report);
+  await persistRecord("volunteer_reports", report);
+  saveState();
+  rerenderAll();
+  toast("Volunteer report submitted.");
+}
+
+async function handleAvailabilitySubmit(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  const profile = effectiveProfile();
+  const existing = state.availability.find((item) => item.volunteer_profile_id === profile.id);
+  const next = {
+    id: existing?.id || `availability-${Date.now()}`,
+    volunteer_profile_id: profile.id || "local-volunteer",
+    weekdays: data.weekdays,
+    weekends: data.weekends,
+    communities: data.communities,
+    interests: data.interests,
+    notes: data.notes,
+  };
+  if (existing) Object.assign(existing, next);
+  else state.availability.unshift(next);
+  await persistRecord("volunteer_availability", next);
+  saveState();
+  rerenderAll();
+  toast("Availability saved.");
+}
+
+async function approveAccount(profileId, action) {
+  const note = window.prompt(`Optional note for ${action}:`) || "";
+  const account = state.accounts.find((item) => item.id === profileId);
+  const nextStatus = action === "approve" || action === "reactivate" ? "approved" : action === "suspend" ? "suspended" : "rejected";
+  if (account) {
+    account.approval_status = nextStatus;
+    account.decision_note = note;
+  }
+  const log = {
+    id: `approval-${Date.now()}`,
+    profile_id: profileId,
+    actor_name: effectiveProfile().display_name,
+    action,
+    note,
+    created_at: new Date().toISOString(),
+  };
+  state.approvalLog.unshift(log);
+  await callApproveAccount(profileId, action, note);
+  saveState();
+  rerenderAll();
+  toast(`Account ${action} action saved.`);
+}
+
+async function callApproveAccount(profileId, action, note) {
+  const config = window.CAMPAIGN_CONFIG || {};
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !currentSession) return { mode: "local" };
+  try {
+    const response = await fetch(`${config.supabaseUrl}/functions/v1/approve-account`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ profileId, action, note }),
+    });
+    return response.ok ? response.json() : { mode: "local", error: await response.text() };
+  } catch (error) {
+    return { mode: "local", error: error.message };
+  }
+}
+
 function bindForms() {
   $("#eventForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1088,23 +1649,7 @@ function bindForms() {
     toast("Event saved to local preview state.");
   });
 
-  $("#outreachForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.target));
-    state.outreach.unshift({
-      id: `out-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
-      stakeholder: data.stakeholder,
-      method: data.method,
-      outcome: data.outcome,
-      followUp: data.followUp || "Not set",
-      status: "Open",
-    });
-    await persistRecord("outreach_logs", data);
-    saveState();
-    rerenderAll();
-    toast("Outreach logged. Sensitive traits were not requested or stored.");
-  });
+  $("#outreachForm").addEventListener("submit", handleOutreachSubmit);
 
   $("#metricForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1160,10 +1705,10 @@ async function loadProfile() {
   if (!client) return;
   const { data } = await client
     .from("profiles")
-    .select("display_name, role")
+    .select("id, display_name, email, phone, role, approval_status, community_preference, zone_preference, availability_note, volunteer_interests")
     .eq("id", currentSession.user.id)
     .single();
-  currentProfile = data || null;
+  currentProfile = data ? normalizeProfile(data) : null;
   if (data?.role) {
     state.activeRole = data.role;
     saveState();
@@ -1177,37 +1722,71 @@ function showLoginOverlay() {
       style.id = "loginOverlayStyles";
       style.textContent = `
         .login-overlay { position: fixed; inset: 0; background: rgba(16, 37, 35, 0.55); display: grid; place-items: center; z-index: 9999; }
-        .login-card { background: var(--panel); padding: 28px 32px; border-radius: var(--radius); width: min(380px, 90vw); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); font-family: inherit; border: 1px solid var(--line); color: var(--ink); }
+        .login-card { background: var(--panel); padding: 28px 32px; border-radius: var(--radius); width: clamp(320px, 38vw, 520px); max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); font-family: inherit; border: 1px solid var(--line); color: var(--ink); max-height: 92vh; overflow: auto; }
         .login-card h2 { margin: 0; font-size: 1.4rem; }
         .login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 0.84rem; font-weight: 800; color: var(--ink); }
-        .login-card input { padding: 9px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.95rem; background: #fff; color: var(--ink); }
+        .login-card input, .login-card textarea { padding: 9px 10px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; font-size: 0.95rem; background: #fff; color: var(--ink); }
         .login-card button { padding: 0 14px; min-height: 40px; border: 1px solid var(--teal); border-radius: 6px; background: var(--teal); color: #fff; font-weight: 800; cursor: pointer; }
+        .auth-tabs { display: grid; grid-template-columns: 1fr; gap: 8px; }
+        .auth-tabs button { background: #fff; color: var(--ink); border-color: var(--line); }
+        .auth-tabs button.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+        .auth-form { display: grid; gap: 12px; }
+        .auth-form[hidden] { display: none; }
         .login-card button:disabled { opacity: 0.6; cursor: progress; }
         .login-error { color: var(--coral); font-size: 0.85rem; margin: 0; font-weight: 800; }
+        .login-help { color: var(--muted); line-height: 1.45; margin: 0; }
+        @media (max-width: 430px) { .auth-tabs { grid-template-columns: 1fr; } .login-card { padding: 24px 20px; } }
       `;
       document.head.appendChild(style);
     }
     const overlay = document.createElement("div");
     overlay.className = "login-overlay";
     overlay.innerHTML = `
-      <form class="login-card">
+      <div class="login-card">
         <p class="eyebrow">Sign in</p>
         <h2>Dorit Campaign Dashboard</h2>
-        <label>Email<input type="email" name="email" required autocomplete="username" /></label>
-        <label>Password<input type="password" name="password" required autocomplete="current-password" /></label>
+        <div class="auth-tabs">
+          <button type="button" class="active" data-auth-tab="signin">Sign in</button>
+          <button type="button" data-auth-tab="signup">Create account</button>
+        </div>
         <p class="login-error" hidden></p>
-        <button type="submit">Sign in</button>
-      </form>
+        <form class="auth-form" id="signInForm">
+          <label>Email<input type="email" name="email" required autocomplete="username" /></label>
+          <label>Password<input type="password" name="password" required autocomplete="current-password" /></label>
+          <button type="submit">Sign in</button>
+        </form>
+        <form class="auth-form" id="signUpForm" hidden>
+          <p class="login-help">Volunteer accounts require approval by Dorit or a Campaign Manager before dashboard access.</p>
+          <label>Full name<input name="display_name" required autocomplete="name" /></label>
+          <label>Email<input type="email" name="email" required autocomplete="email" /></label>
+          <label>Password<input type="password" name="password" required autocomplete="new-password" minlength="8" /></label>
+          <label>Phone optional<input name="phone" autocomplete="tel" /></label>
+          <label>Community preference<input name="community_preference" placeholder="New Kleinburg, Nobleton, King City..." /></label>
+          <label>Zone preference<input name="zone_preference" placeholder="Optional" /></label>
+          <label>Availability note<textarea name="availability_note" placeholder="Weekends, evenings, events, phone bank..."></textarea></label>
+          <label>Volunteer interests<input name="volunteer_interests" placeholder="Canvassing, events, calls" /></label>
+          <button type="submit">Create volunteer account</button>
+        </form>
+      </div>
     `;
     document.body.appendChild(overlay);
-    const form = overlay.querySelector("form");
+    const signInForm = overlay.querySelector("#signInForm");
+    const signUpForm = overlay.querySelector("#signUpForm");
     const errorEl = overlay.querySelector(".login-error");
-    const submitBtn = overlay.querySelector("button[type=submit]");
-    form.addEventListener("submit", async (event) => {
+    overlay.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        overlay.querySelectorAll("[data-auth-tab]").forEach((button) => button.classList.toggle("active", button === tab));
+        signInForm.hidden = tab.dataset.authTab !== "signin";
+        signUpForm.hidden = tab.dataset.authTab !== "signup";
+        errorEl.hidden = true;
+      });
+    });
+    signInForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       errorEl.hidden = true;
+      const submitBtn = signInForm.querySelector("button[type=submit]");
       submitBtn.disabled = true;
-      const fd = new FormData(form);
+      const fd = new FormData(signInForm);
       const client = getSupabaseClient();
       const { data, error } = await client.auth.signInWithPassword({
         email: fd.get("email"),
@@ -1223,6 +1802,47 @@ function showLoginOverlay() {
       await loadProfile();
       overlay.remove();
       resolve(currentSession);
+    });
+    signUpForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorEl.hidden = true;
+      const submitBtn = signUpForm.querySelector("button[type=submit]");
+      submitBtn.disabled = true;
+      const fd = new FormData(signUpForm);
+      const client = getSupabaseClient();
+      const interests = String(fd.get("volunteer_interests") || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const { data, error } = await client.auth.signUp({
+        email: fd.get("email"),
+        password: fd.get("password"),
+        options: {
+          data: {
+            display_name: fd.get("display_name"),
+            phone: fd.get("phone"),
+            community_preference: fd.get("community_preference"),
+            zone_preference: fd.get("zone_preference"),
+            availability_note: fd.get("availability_note"),
+            volunteer_interests: interests,
+          },
+        },
+      });
+      submitBtn.disabled = false;
+      if (error) {
+        errorEl.textContent = error.message;
+        errorEl.hidden = false;
+        return;
+      }
+      if (data.session) {
+        currentSession = data.session;
+        await loadProfile();
+        overlay.remove();
+        resolve(currentSession);
+        return;
+      }
+      errorEl.textContent = "Account created. Check your email if confirmation is enabled, then sign in. Your volunteer access will remain pending until approved.";
+      errorEl.hidden = false;
     });
   });
 }
@@ -1309,15 +1929,35 @@ function toast(message) {
 }
 
 function rerenderAll() {
-  renderCommand();
-  renderEvents();
-  renderCrm();
-  renderMapView();
-  renderGoals();
-  renderField();
-  renderTraining();
-  renderForms();
+  safeRender("command", renderCommand);
+  safeRender("today", renderToday);
+  safeRender("events", renderEvents);
+  safeRender("relationships", renderRelationships);
+  safeRender("crm", renderCrm);
+  safeRender("map", renderMapView);
+  safeRender("goals", renderGoals);
+  safeRender("field", renderField);
+  safeRender("training", renderTraining);
+  safeRender("forms", renderForms);
+  safeRender("accounts", renderAccounts);
+  safeRender("field-notes", renderFieldNotes);
+  safeRender("my-shift", renderMyShift);
+  safeRender("my-zone", renderMyZone);
+  safeRender("submit-report", renderSubmitReport);
+  safeRender("availability", renderAvailability);
   switchSection(activeSection);
+}
+
+function safeRender(sectionId, renderer) {
+  try {
+    renderer();
+  } catch (error) {
+    console.error(`Failed to render ${sectionId}`, error);
+    const target = document.getElementById(sectionId);
+    if (target) {
+      target.innerHTML = `<div class="empty-state"><strong>Could not render this panel.</strong><p>${error.message}</p></div>`;
+    }
+  }
 }
 
 async function hydrateFromSupabase() {
@@ -1336,6 +1976,15 @@ async function hydrateFromSupabase() {
     if (remote.zones?.length) state.zones = remote.zones.map(mapRemoteZone);
     if (remote.locations?.length) state.locations = remote.locations.map(mapRemoteLocation);
     if (remote.training?.length) state.personas = remote.training.map(mapRemoteTraining);
+    if (remote.profile) {
+      currentProfile = normalizeProfile(remote.profile);
+      state.activeRole = currentProfile.role;
+    }
+    if (remote.accounts?.length) state.accounts = remote.accounts.map(mapRemoteAccount);
+    if (remote.approvalLog?.length) state.approvalLog = remote.approvalLog.map(mapRemoteApprovalLog);
+    if (remote.assignments?.length) state.assignments = remote.assignments.map(mapRemoteAssignment);
+    if (remote.availability?.length) state.availability = remote.availability;
+    if (remote.volunteerReports?.length) state.volunteerReports = remote.volunteerReports;
   } catch (error) {
     console.warn("Supabase hydration failed; using local preview state.", error);
   }
@@ -1413,8 +2062,8 @@ function mapRemoteLocation(loc) {
     type: loc.type,
     half: loc.half,
     tier: loc.tier || 2,
-    lat: Number(loc.latitude),
-    lng: Number(loc.longitude),
+    lat: loc.latitude == null ? null : Number(loc.latitude),
+    lng: loc.longitude == null ? null : Number(loc.longitude),
     note: loc.notes || "",
   };
 }
@@ -1431,16 +2080,73 @@ function mapRemoteTraining(card) {
   };
 }
 
+function mapRemoteAccount(account) {
+  return normalizeProfile({
+    ...account,
+    volunteer_interests: Array.isArray(account.volunteer_interests) ? account.volunteer_interests : [],
+  });
+}
+
+function mapRemoteApprovalLog(log) {
+  return {
+    id: log.id,
+    profile_id: log.profile_id,
+    actor_name: log.actor_profile?.display_name || log.actor_name || "Approver",
+    action: log.action,
+    note: log.note || "",
+    created_at: log.created_at,
+  };
+}
+
+function mapRemoteAssignment(assignment) {
+  return {
+    id: assignment.id,
+    volunteer_profile_id: assignment.volunteer_profile_id,
+    title: assignment.title,
+    type: assignment.assignment_type || assignment.type || "Shift",
+    date: assignment.assignment_date || assignment.date,
+    start_time: assignment.start_time || "",
+    end_time: assignment.end_time || "",
+    location: assignment.location || "",
+    zone_id: assignment.zone_id || "",
+    instructions: assignment.instructions || "",
+    status: assignment.status || "assigned",
+  };
+}
+
+function showAccountStatusScreen() {
+  const profile = effectiveProfile();
+  const copy = {
+    pending: ["Volunteer account pending", "Thanks for signing up. Dorit or a Campaign Manager needs to approve this volunteer account before campaign data is available."],
+    rejected: ["Volunteer account not approved", "This volunteer account was not approved. Contact the campaign manager if you think this is a mistake."],
+    suspended: ["Account suspended", "This account is currently suspended and cannot access the campaign dashboard."],
+  }[profile.approval_status] || ["Account unavailable", "This account cannot access the dashboard right now."];
+  document.body.innerHTML = `
+    <main class="login-overlay account-state-page">
+      <section class="login-card">
+        <p class="eyebrow">Dorit Campaign Dashboard</p>
+        <h2>${copy[0]}</h2>
+        <p class="login-help">${copy[1]}</p>
+        <p class="login-help"><strong>${profile.display_name}</strong>${profile.email ? ` - ${profile.email}` : ""}</p>
+        <button class="primary-action" id="pendingSignOut" type="button">Sign out</button>
+      </section>
+    </main>
+  `;
+  document.getElementById("pendingSignOut").addEventListener("click", signOut);
+}
+
 async function init() {
   await requireAuth();
+  if (currentSession && !isApprovedProfile()) {
+    showAccountStatusScreen();
+    return;
+  }
   await hydrateFromSupabase();
+  if (currentSession && !isApprovedProfile()) {
+    showAccountStatusScreen();
+    return;
+  }
   injectSignOutButton();
-  $("#roleSelect").value = state.activeRole;
-  $("#roleSelect").addEventListener("change", (event) => {
-    state.activeRole = event.target.value;
-    saveState();
-    rerenderAll();
-  });
   document.body.addEventListener("click", (event) => {
     const moreBtn = event.target.closest("#bottomMoreBtn");
     if (moreBtn) {
