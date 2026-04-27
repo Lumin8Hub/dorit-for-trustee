@@ -1225,6 +1225,8 @@ function renderMapView() {
   `;
 }
 
+let mapResizeObserver = null;
+
 function renderMap() {
   const targetId = activeSection === "my-zone" ? "volunteerMap" : "campaignMap";
   const target = document.getElementById(targetId);
@@ -1233,9 +1235,19 @@ function renderMap() {
     target.innerHTML = schematicMap();
     return;
   }
+  // Wait until the container actually has dimensions. Without this, Leaflet
+  // initializes against a 0x0 box and tiles end up stacked in a vertical strip.
+  if (target.clientWidth === 0 || target.clientHeight === 0) {
+    requestAnimationFrame(renderMap);
+    return;
+  }
   if (mapInstance) {
     mapInstance.remove();
     mapInstance = null;
+  }
+  if (mapResizeObserver) {
+    mapResizeObserver.disconnect();
+    mapResizeObserver = null;
   }
   mapInstance = L.map(targetId, { scrollWheelZoom: false }).setView([43.91, -79.58], 11);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1260,6 +1272,19 @@ function renderMap() {
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>${loc.name}</strong><br>${loc.type} - ${loc.half}<br>${loc.note}`);
   });
+  // Belt-and-suspenders: force Leaflet to recompute tile layout once the
+  // browser has finished laying out the now-visible container, and again
+  // whenever the container resizes (sidebar collapse, window resize, etc.).
+  const refreshSize = () => {
+    if (!mapInstance) return;
+    mapInstance.invalidateSize(false);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(refreshSize));
+  setTimeout(refreshSize, 250);
+  if (typeof ResizeObserver !== "undefined") {
+    mapResizeObserver = new ResizeObserver(refreshSize);
+    mapResizeObserver.observe(target);
+  }
 }
 
 function schematicMap() {
