@@ -339,6 +339,12 @@ to authenticated
 using (public.current_profile_approved() and public.current_app_role() in ('candidate', 'manager'))
 with check (public.current_profile_approved() and public.current_app_role() in ('candidate', 'manager'));
 
+drop policy if exists "profiles self insert" on public.profiles;
+create policy "profiles self insert"
+on public.profiles for insert
+to authenticated
+with check (id = auth.uid() and role = 'volunteer' and approval_status = 'pending');
+
 create policy "campaign read authenticated"
 on public.campaign_metrics for select
 to authenticated

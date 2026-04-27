@@ -1792,11 +1792,36 @@ async function loadProfile() {
   if (!currentSession) return;
   const client = getSupabaseClient();
   if (!client) return;
-  const { data } = await client
+  const profileColumns = "id, display_name, email, phone, role, approval_status, community_preference, zone_preference, availability_note, volunteer_interests";
+  let { data } = await client
     .from("profiles")
-    .select("id, display_name, email, phone, role, approval_status, community_preference, zone_preference, availability_note, volunteer_interests")
+    .select(profileColumns)
     .eq("id", currentSession.user.id)
-    .single();
+    .maybeSingle();
+  // Fallback: if the public.profiles row is missing (e.g., the
+  // handle_new_user trigger never fired), create the pending profile from
+  // the user's signup metadata so a Campaign Manager can review it.
+  if (!data) {
+    const meta = currentSession.user.user_metadata || {};
+    const fallback = {
+      id: currentSession.user.id,
+      display_name: meta.display_name || (currentSession.user.email || "").split("@")[0] || "Volunteer",
+      email: currentSession.user.email || "",
+      phone: meta.phone || null,
+      role: "volunteer",
+      approval_status: "pending",
+      community_preference: meta.community_preference || null,
+      zone_preference: meta.zone_preference || null,
+      availability_note: meta.availability_note || null,
+      volunteer_interests: Array.isArray(meta.volunteer_interests) ? meta.volunteer_interests : [],
+    };
+    const insert = await client.from("profiles").insert(fallback).select(profileColumns).maybeSingle();
+    if (insert.data) {
+      data = insert.data;
+    } else if (insert.error) {
+      console.warn("Profile auto-create failed; check that schema.sql is deployed and RLS allows self-insert.", insert.error);
+    }
+  }
   currentProfile = data ? normalizeProfile(data) : null;
   if (data?.role) {
     state.activeRole = data.role;
@@ -1903,10 +1928,12 @@ function showLoginOverlay() {
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
+      const redirectTo = `${window.location.origin}${window.location.pathname}`;
       const { data, error } = await client.auth.signUp({
         email: fd.get("email"),
         password: fd.get("password"),
         options: {
+          emailRedirectTo: redirectTo,
           data: {
             display_name: fd.get("display_name"),
             phone: fd.get("phone"),
