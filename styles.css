@@ -987,3 +987,56 @@ button {
     min-height: 440px;
   }
 }
+
+.view-as-toggle {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  display: grid;
+  gap: 8px;
+}
+
+.view-as-toggle .eyebrow {
+  margin: 0;
+}
+
+.view-as-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.view-as-buttons button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #f7f4ee;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+}
+
+.view-as-buttons button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.view-as-buttons button.active {
+  background: #f7f4ee;
+  color: #16332f;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.view-as-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #f3d29d;
+}

@@ -540,12 +540,39 @@ const $ = (selector) => document.querySelector(selector);
 const formatNumber = (value) => new Intl.NumberFormat("en-CA").format(value);
 const daysToElection = () => Math.max(0, Math.ceil((ELECTION_DAY - new Date()) / 86400000));
 const pct = (actual, target) => Math.min(100, Math.round((actual / target) * 100));
-const canManageAccounts = () => ["candidate", "manager"].includes(effectiveProfile().role);
+const canManageAccounts = () => ["candidate", "manager"].includes(actualRole());
 const isApprovedProfile = (profile = effectiveProfile()) => (profile.approval_status || "approved") === "approved";
 
+let viewAsRole = null;
+
+function actualRole() {
+  if (currentProfile?.role) return currentProfile.role;
+  return (state.localProfile && state.localProfile.role) || state.activeRole || "manager";
+}
+
+function canPreviewRoles() {
+  return actualRole() === "manager";
+}
+
 function effectiveProfile() {
-  if (currentProfile) return normalizeProfile(currentProfile);
-  return normalizeProfile(state.localProfile || { role: state.activeRole || "manager", approval_status: "approved" });
+  const base = currentProfile
+    ? normalizeProfile(currentProfile)
+    : normalizeProfile(state.localProfile || { role: state.activeRole || "manager", approval_status: "approved" });
+  if (viewAsRole && canPreviewRoles() && viewAsRole !== base.role) {
+    return {
+      ...base,
+      role: viewAsRole,
+      approval_status: "approved",
+      _previewing: true,
+    };
+  }
+  return base;
+}
+
+function setViewAsRole(role) {
+  if (!canPreviewRoles()) return;
+  viewAsRole = role && role !== actualRole() ? role : null;
+  rerenderAll();
 }
 
 function normalizeProfile(profile) {
@@ -612,10 +639,47 @@ function renderProfileBlock() {
   const role = $("#profileRole");
   const status = $("#profileStatus");
   if (!name || !role || !status) return;
+  const previewing = profile._previewing === true;
   name.textContent = profile.display_name;
-  role.textContent = `${prettyRole(profile.role)}${profile.email ? ` - ${profile.email}` : ""}`;
-  status.textContent = profile.approval_status;
-  status.className = `status-pill ${profile.approval_status === "approved" ? "open" : "warn"}`;
+  const roleLabel = previewing
+    ? `${prettyRole(actualRole())} - viewing as ${prettyRole(profile.role)}`
+    : `${prettyRole(profile.role)}${profile.email ? ` - ${profile.email}` : ""}`;
+  role.textContent = roleLabel;
+  status.textContent = previewing ? "preview mode" : profile.approval_status;
+  status.className = `status-pill ${previewing ? "warn" : profile.approval_status === "approved" ? "open" : "warn"}`;
+  renderViewAsToggle();
+}
+
+function renderViewAsToggle() {
+  const block = document.querySelector(".role-block");
+  if (!block) return;
+  let toggle = document.getElementById("viewAsToggle");
+  if (!canPreviewRoles()) {
+    if (toggle) toggle.remove();
+    return;
+  }
+  if (!toggle) {
+    toggle = document.createElement("div");
+    toggle.id = "viewAsToggle";
+    toggle.className = "view-as-toggle";
+    block.appendChild(toggle);
+    toggle.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-view-as]");
+      if (!button) return;
+      const choice = button.dataset.viewAs;
+      setViewAsRole(choice === "manager" ? null : choice);
+    });
+  }
+  const current = viewAsRole || "manager";
+  toggle.innerHTML = `
+    <p class="eyebrow">View as</p>
+    <div class="view-as-buttons" role="group" aria-label="Preview the dashboard as another role">
+      <button type="button" data-view-as="manager" class="${current === "manager" ? "active" : ""}" aria-pressed="${current === "manager"}">Manager</button>
+      <button type="button" data-view-as="candidate" class="${current === "candidate" ? "active" : ""}" aria-pressed="${current === "candidate"}">Candidate</button>
+      <button type="button" data-view-as="volunteer" class="${current === "volunteer" ? "active" : ""}" aria-pressed="${current === "volunteer"}">Volunteer</button>
+    </div>
+    ${viewAsRole ? `<p class="view-as-hint">Previewing the ${prettyRole(viewAsRole)} navigation and content. Switch back to Manager when you are done.</p>` : ""}
+  `;
 }
 
 function prettyRole(role) {
@@ -688,7 +752,7 @@ function roleBrief() {
       actions: ["Read the zone card before canvassing.", "Use the persona guide as conversation context only.", "Log outcomes without sensitive personal traits."],
     },
   };
-  return brief[state.activeRole] || brief.manager;
+  return brief[effectiveProfile().role] || brief.manager;
 }
 
 function renderCommand() {
@@ -724,7 +788,7 @@ function renderCommand() {
             <p class="eyebrow">Current workspace</p>
             <h4>${brief.title}</h4>
           </div>
-          <span class="role-pill half-pill">${state.activeRole}</span>
+          <span class="role-pill half-pill">${effectiveProfile().role}</span>
         </div>
         <p>${brief.text}</p>
         <div class="timeline-list">
@@ -733,7 +797,7 @@ function renderCommand() {
               <div class="action-icon">${actionIcon(i)}</div>
               <strong>${action}</strong>
               <p>Owner and due date can be assigned from the update forms once Supabase is connected.</p>
-              <a class="action-link" href="#" data-jump="forms">Open task <span aria-hidden="true">â†’</span></a>
+              <a class="action-link" href="#" data-jump="forms">Open task <span aria-hidden="true">→</span></a>
             </article>
           `).join("")}
         </div>
