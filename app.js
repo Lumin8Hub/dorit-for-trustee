@@ -2083,7 +2083,12 @@ async function hydrateFromSupabase() {
     const response = await fetch(`${config.supabaseUrl}/functions/v1/dashboard-read-model`, {
       headers: authHeaders(),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(`dashboard-read-model returned ${response.status}`, body);
+      toast(`Live data unavailable (${response.status}). Showing local preview.`);
+      return;
+    }
     const remote = await response.json();
     if (remote.metrics?.length) state.metrics = remote.metrics;
     if (remote.events?.length) state.events = remote.events.map(mapRemoteEvent);
@@ -2103,6 +2108,7 @@ async function hydrateFromSupabase() {
     if (remote.volunteerReports?.length) state.volunteerReports = remote.volunteerReports;
   } catch (error) {
     console.warn("Supabase hydration failed; using local preview state.", error);
+    toast("Could not reach Supabase Edge Functions. Showing local preview.");
   }
 }
 
